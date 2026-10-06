@@ -1,0 +1,20 @@
+services:
+
+  mongo:
+    image: mongo:7
+    command: [ "--replSet", "rs0", "--bind_ip_all" ]
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      
+  mongo-init:   # one-shot: inicia o RS e só termina quando o nó vira PRIMARY
+    image: mongo:7
+    depends_on:
+      mongo:
+        condition: service_healthy
+    entrypoint:
+      - bash
+      - -c
+      - "until mongosh --host mongo:27017 --quiet --eval 'try { if (rs.status().myState !== 1) { quit(3) } } catch (e) { try { rs.initiate() } catch (e2) {} quit(3) }' >/dev/null 2>&1; do sleep 2; done"
