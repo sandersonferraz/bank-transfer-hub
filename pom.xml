@@ -8,12 +8,12 @@
     </parent>
 
     <groupId>br.com.banco</groupId>
-    <artifactId>core-transacional</artifactId>
+    <artifactId>bank-transfer-hub</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <modules>
-        <!--    Modules-->
+        <module>transfer-service</module>
     </modules>
 
     <properties>
