@@ -4,287 +4,200 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.NullSource;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.*;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.stream.Stream;
 
+import static com.transaction.transferservice.domain.model.Entry.EntryType.*;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("Money tests")
 class MoneyTests {
 
-    private static final String BRL = "BRL";
+    private static final Instant NOW = Instant.parse("2026-10-01T12:00:00Z");
 
     private static Money brl(String amount) {
-        return new Money(new BigDecimal(amount), BRL);
+        return new Money(new BigDecimal(amount), "BRL");
     }
 
 
+    private static Entry base() {
+        return new Entry("account-1", DEBIT, brl("100.00"), "ref-1", NOW);
+    }
+
+
+
     @Nested
-    @DisplayName("construction")
+    @DisplayName("construction and accessors")
     class Construction {
 
-        @ParameterizedTest(name = "accepts valid amount {0}")
-        @ValueSource(strings = {"0", "0.00", "0.01", "1", "10.50", "999999999999.99", "0.0000001"})
-        @DisplayName("Should create with valid amount")
-        void shouldCreateWithValidAmount(String amount) {
-            Money money = brl(amount);
-            assertThat(money.amount()).isEqualTo(amount);
-            assertThat(money.currency()).isEqualTo(BRL);
-        }
-
-
         @Test
-        @DisplayName("Should accept zero amount")
-        void shouldAcceptsZeroAmount() {
-            assertThatCode(() -> new Money(BigDecimal.ZERO.negate(), BRL)).doesNotThrowAnyException();
+        @DisplayName("Should store all components and expose them through accessors")
+        void shouldStoreAllComponentsAndExposeThemThroughAccessors() {
+            Money amount = brl("250.75");
+            Entry Entry = new Entry("account-9", CREDIT, amount, "pix-123", NOW);
+            assertThat(Entry.accountId()).isEqualTo("account-9");
+            assertThat(Entry.type()).isEqualTo(CREDIT);
+            assertThat(Entry.amount()).isEqualTo(amount);
+            assertThat(Entry.reference()).isEqualTo("pix-123");
+            assertThat(Entry.instant()).isEqualTo(NOW);
         }
 
-
-        @Test
-        @DisplayName("Should accept negative zero (signum == 0)")
-        void shouldAcceptsNegativeZero() {
-            assertThatCode(() -> new Money(BigDecimal.ZERO, BRL)).doesNotThrowAnyException();
-        }
-
-        @DisplayName("Should reject negative amount")
-        @ParameterizedTest(name = "Should reject negative amount {0}")
-        @ValueSource(strings = {"-0.01", "-1", "-100.50", "-0.0000001"})
-        void shouldRejectsNegativeAmount(String amount) {
-            assertThatIllegalArgumentException().isThrownBy(() -> brl(amount))
-                    .withMessage("Amount cannot be negative");
-
-
-        }
-
-        @ParameterizedTest
-        @NullSource
-        @DisplayName("Should reject null amount")
-        void shouldRejectNullAmount(BigDecimal amount) {
-            assertThatIllegalArgumentException()
-                    .isThrownBy(() -> new Money(amount, BRL))
-                    .withMessage("Amount cannot be negative");
-        }
-
-
-        @ParameterizedTest
-        @NullSource
-        @DisplayName("Should reject null currency")
-        void shouldRejectNullCurrency(String currency) {
-            assertThatIllegalArgumentException()
-                    .isThrownBy(() -> new Money(BigDecimal.TEN, currency))
-                    .withMessage("Currency cannot be null");
-        }
-
-        @ParameterizedTest(name = "rejects unsupported currency \"{0}\"")
-        @ValueSource(strings = {"USD", "EUR", "brl", "Brl", " BRL", "BRL ", "", " "})
-        @DisplayName("Should reject unsupported currency")
-        void shouldRejectUnsupportedCurrency(String currency) {
-            assertThatIllegalArgumentException()
-                    .isThrownBy(() -> new Money(BigDecimal.TEN, currency))
-                    .withMessage("Supported currency BRL");
-        }
-
-        @Test
-        @DisplayName("Should validate amount before currency when both are invalid")
-        void shouldReportAmountErrorFirstWhenBothInvalid() {
-            assertThatIllegalArgumentException()
-                    .isThrownBy(() -> new Money(new BigDecimal("-1"), "USD"))
-                    .withMessage("Amount cannot be negative");
-        }
 
         @Test
         @DisplayName("Should keep the same amount instance")
         void shouldKeepTheSameAmountInstance() {
-            BigDecimal amount = new BigDecimal("10.00");
-            Money money = new Money(amount, BRL);
-            assertThat(money.amount()).isSameAs(amount);
+            Money amount = brl("10.00");
+            Entry Entry = new Entry("account-1", CREDIT, amount, "ref-1", NOW);
+            assertThat(Entry.amount()).isSameAs(amount);
+        }
+
+        @ParameterizedTest(name = "accepts type {0}")
+        @EnumSource(Entry.EntryType.class)
+        @DisplayName("Should accept every type")
+        void shouldAcceptEveryType(Entry.EntryType type) {
+            Entry Entry = new Entry("account-1", type, brl("1.00"), "ref-1", NOW);
+            assertThat(Entry.type()).isEqualTo(type);
+        }
+
+
+        @Test
+        @DisplayName("Should accept zero as amount (delegated to Money)")
+        void shouldAcceptZeroValue() {
+            assertThatCode(() -> new Entry("account-1", CREDIT, brl("0.00"), "ref-1", NOW))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("Should not be creatable with invalid money")
+        void shouldNotBeCreatableWithInvalidMoney() {
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> new Entry("account-1", CREDIT, brl("-1.00"), "ref-1", NOW))
+                    .withMessage("Amount cannot be negative");
         }
 
     }
-
 
     @Nested
-    @DisplayName("Sum")
-    class Sum {
-
-        @ParameterizedTest(name = "{0} + {1} = {2}")
-        @CsvSource({
-                "10.00,  5.00,  15.00",
-                "0.10,   0.20,  0.30",
-                "0,      0,     0",
-                "0,      7.50,  7.50",
-                "7.50,   0,     7.50",
-                "0.01,   0.01,  0.02",
-                "999999999999.99, 0.01, 1000000000000.00"
-        })
-        @DisplayName("Should sum amounts")
-        void shouldSumAmounts(String a, String b, String expected) {
-            Money result = brl(a).sum(brl(b));
-            assertThat(result.amount()).isEqualByComparingTo(expected);
-            assertThat(result.currency()).isEqualTo(BRL);
-        }
+    @DisplayName("Type enum")
+    class TypeEnum {
 
         @Test
-        @DisplayName("Should verify whether it is exact (no floating point error)")
-        void shouldVerifyWhetherItIsExact() {
-            Money result = brl("0.1").sum(brl("0.2"));
-            assertThat(result.amount()).isEqualByComparingTo("0.3");
+        @DisplayName("Should declare exactly DEBIT and CREDIT, in this order")
+        void shouldDeclareExpectedConstants() {
+            assertThat(values()).containsExactly(DEBIT, CREDIT);
         }
 
-        @Test
-        @DisplayName("Should keep the larger scale of the operands")
-        void shouldKeepLargerScale() {
-            Money result = brl("1.10").sum(brl("2.205"));
-            assertThat(result.amount()).isEqualTo(new BigDecimal("3.305"));
-            assertThat(result.amount().scale()).isEqualTo(3);
+        @ParameterizedTest(name = "valueOf(\"{0}\") resolves the constant")
+        @ValueSource(strings = {"DEBIT", "CREDIT"})
+        @DisplayName("Should resolve by name")
+        void shouldResolveByName(String name) {
+            assertThat(valueOf(name).name()).isEqualTo(name);
         }
 
-        @Test
-        @DisplayName("Should return a new instance and not mutate operands")
-        void shouldReturnANewInstanceAndNotMutateOperands() {
-            Money a = brl("10.00");
-            Money b = brl("5.00");
-            Money result = a.sum(b);
-            assertThat(result).isNotSameAs(a).isNotSameAs(b);
-            assertThat(a.amount()).isEqualTo(new BigDecimal("10.00"));
-            assertThat(b.amount()).isEqualTo(new BigDecimal("5.00"));
+        @ParameterizedTest(name = "valueOf(\"{0}\") fails")
+        @ValueSource(strings = {"debit", "Credit", "REVERSAL", "", " DEBIT"})
+        @DisplayName("Should reject unknown names")
+        void shouldRejectUnknownNames(String name) {
+            assertThatIllegalArgumentException().isThrownBy(() -> valueOf(name));
         }
-
-        @Test
-        @DisplayName("Should be commutative")
-        void shouldBeCommutative() {
-            Money a = brl("12.34");
-            Money b = brl("56.78");
-            assertThat(a.sum(b)).isEqualTo(b.sum(a));
-        }
-
-        @Test
-        @DisplayName("Should be associative")
-        void shouldBeAssociative() {
-            Money a = brl("1.11");
-            Money b = brl("2.22");
-            Money c = brl("3.33");
-            assertThat(a.sum(b).sum(c)).isEqualTo(a.sum(b.sum(c)));
-        }
-
-
-        @Test
-        @DisplayName("Should have zero as the identity element")
-        void shouldHaveZeroAsIdentity() {
-            Money a = brl("42.00");
-            Money zero = brl("0.00");
-            assertThat(a.sum(zero)).isEqualTo(a);
-            assertThat(zero.sum(a)).isEqualTo(a);
-        }
-
-        @Test
-        @DisplayName("Should be chained")
-        void shouldBeChainable() {
-            Money result = brl("1.00").sum(brl("2.00")).sum(brl("3.00"));
-            assertThat(result.amount()).isEqualByComparingTo("6.00");
-        }
-
-        @ParameterizedTest
-        @NullSource
-        @DisplayName("Should reject null operand with NullPointerException")
-        void shouldRejectNullOperand(Money other) {
-            assertThatNullPointerException()
-                    .isThrownBy(() -> brl("10.00").sum(other))
-                    .withMessage("Amount cannot be null");
-        }
-
-
     }
-
 
 
     @Nested
     @DisplayName("equality, hashCode and toString")
     class ValueObjectContract {
 
+        /**
+         * One variation per component: each differs from base() in exactly one field.
+         */
+        static Stream<Arguments> EntriesDifferingInOneField() {
+            return Stream.of(
+                    Arguments.of("accountId", new Entry("account-2", DEBIT, brl("100.00"), "ref-1", NOW)),
+                    Arguments.of("EntryType", new Entry("account-1", CREDIT, brl("100.00"), "ref-1", NOW)),
+                    Arguments.of("amount", new Entry("account-1", DEBIT, brl("100.01"), "ref-1", NOW)),
+                    Arguments.of("reference", new Entry("account-1", DEBIT, brl("100.00"), "ref-2", NOW)),
+                    Arguments.of("instant", new Entry("account-1", DEBIT, brl("100.00"), "ref-1", NOW.plusSeconds(1)))
+            );
+        }
+
         @Test
-        @DisplayName("Should be equal when amount (same scale) and currency match")
-        void shouldBeEqualWhenSameValues() {
-            Money a = brl("10.00");
-            Money b = brl("10.00");
+        @DisplayName("Should be equal when the same components")
+        void shouldBeEqualWhenTheSameComponents() {
+            Entry a = base();
+            Entry b = base();
             assertThat(a).isEqualTo(b).hasSameHashCodeAs(b);
         }
 
         @Test
         @DisplayName("Should be reflexive")
         void shouldBeReflexive() {
-            Money a = brl("10.00");
+            Entry a = base();
             assertThat(a).isEqualTo(a);
         }
 
         @Test
         @DisplayName("Should be symmetric")
         void shouldBeSymmetric() {
-            Money a = brl("10.00");
-            Money b = brl("10.00");
+            Entry a = base();
+            Entry b = base();
             assertThat(a.equals(b)).isEqualTo(b.equals(a));
         }
 
         @Test
         @DisplayName("Should be transitive")
         void shouldBeTransitive() {
-            Money a = brl("10.00");
-            Money b = brl("10.00");
-            Money c = brl("10.00");
+            Entry a = base();
+            Entry b = base();
+            Entry c = base();
             assertThat(a).isEqualTo(b);
             assertThat(b).isEqualTo(c);
             assertThat(a).isEqualTo(c);
         }
 
-        @Test
-        @DisplayName("Should not be equal when the amount differ")
-        void shouldNotBeEqualWhenTheAmountsDiffer() {
-            assertThat(brl("10.00")).isNotEqualTo(brl("10.01"));
+        @ParameterizedTest(name = "Should not be equal when only one ({0}) component differs")
+        @MethodSource("EntriesDifferingInOneField")
+        void shouldNotBeEqualWhenOneComponentDiffers(String field, Entry different) {
+            assertThat(base()).isNotEqualTo(different);
         }
 
         @Test
-        @DisplayName("Should not be equal when amount has same value but different scale")
-        void shouldVerifyThatBeSameNumericAmountWithDifferentScales() {
-            Money a = brl("10.0");
-            Money b = brl("10.00");
-            assertThat(a.amount()).isEqualByComparingTo(b.amount());
-            assertThat(a).isNotEqualTo(b);
-        }
-
-        @Test
-        @DisplayName("Should have different hash codes for same numeric amount with different scales (known pitfall)")
-        void shouldHaveDifferentHashCodesForDifferentScales() {
-            Money a = brl("10.0");
-            Money b = brl("10.00");
-            assertThat(a.amount()).isEqualByComparingTo(b.amount());
-            assertThat(a.hashCode()).isNotEqualTo(b.hashCode());
-        }
-
-        @Test
-        @DisplayName("Should not be equal to null or another type")
+        @DisplayName("Should not be equal to null or other type")
         void shouldNotBeEqualToNullOrOtherType() {
-            Money a = brl("10.00");
-            assertThat(a).isNotEqualTo(null);
-            assertThat(a).isNotEqualTo("10.00 BRL");
+            assertThat(base()).isNotEqualTo(null);
+            assertThat(base()).isNotEqualTo("account-1");
         }
 
         @Test
-        @DisplayName("Should expose components through accessors")
-        void shouldExposeComponentsThroughAccessors() {
-            Money a = brl("10.50");
-            assertThat(a.amount()).isEqualTo(new BigDecimal("10.50"));
-            assertThat(a.currency()).isEqualTo("BRL");
+        @DisplayName("Should not be equal when amounts have the same value but different scale (known pitfall)")
+        void documentsMoneyScalePitfall() {
+            Entry a = new Entry("account-1", DEBIT, brl("10.0"), "ref-1", NOW);
+            Entry b = new Entry("account-1", DEBIT, brl("10.00"), "ref-1", NOW);
+            assertThat(a).isNotEqualTo(b); // inherited from BigDecimal.equals() inside Money
         }
 
         @Test
-        @DisplayName("Should contain the amount and currency and be readable")
-        void shouldContainAmountAndCurrencyAndBeReadable() {
-            assertThat(brl("10.50").toString()).contains("10.50").contains("BRL");
+        @DisplayName("Should treat same instant as equal")
+        void shouldTreatSameInstantAsEqual() {
+            Entry a = new Entry("account-1", DEBIT, brl("1.00"), "ref-1",
+                    Instant.parse("2026-10-01T12:00:00Z"));
+            Entry b = new Entry("account-1", DEBIT, brl("1.00"), "ref-1",
+                    Instant.ofEpochSecond(NOW.getEpochSecond()));
+            assertThat(a).isEqualTo(b);
+        }
+
+        @Test
+        @DisplayName("Should have readable to string")
+        void shouldHaveReadableToString() {
+            String text = base().toString();
+            assertThat(text)
+                    .contains("account-1")
+                    .contains("DEBIT")
+                    .contains("100.00")
+                    .contains("ref-1")
+                    .contains("2026-10-01T12:00:00Z");
         }
     }
-
-
 }
