@@ -110,9 +110,6 @@ class MoneyTests {
     @DisplayName("equality, hashCode and toString")
     class ValueObjectContract {
 
-        /**
-         * One variation per component: each differs from base() in exactly one field.
-         */
         static Stream<Arguments> EntriesDifferingInOneField() {
             return Stream.of(
                     Arguments.of("accountId", new Entry("account-2", DEBIT, brl("100.00"), "ref-1", NOW)),
