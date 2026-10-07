@@ -1,3 +1,38 @@
 spring:
   application:
     name: transfer-service
+  mongodb: # [S] NOT spring.data.mongodb.uri (ignored in Boot 4)
+    uri: mongodb://localhost:27017/core-transacional?directConnection=true
+    data:
+      mongodb:
+        auto-index-creation: true               # [S] off in the "test" profile
+    kafka:
+      bootstrap-servers: localhost:9092
+      template:
+        observation-enabled: true               # [S]
+      listener:
+        observation-enabled: true               # [S]
+        missing-topics-fatal: false
+      producer:
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+        value-serializer: org.apache.kafka.common.serialization.StringSerializer   # relayer sends the stored JSON string
+      consumer:
+        group-id: transactions
+        auto-offset-reset: earliest
+        key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer   # [S]
+        value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+        properties:
+          spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+          spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JacksonJsonDeserializer  # [S] Jackson 3
+          spring.json.use.type.headers: false   # [S]
+          spring.json.trusted.packages: "com.bank.transactions.*"
+  management:
+    endpoints.web.exposure.include: health,metrics,prometheus
+    zipkin.tracing.endpoint: http://localhost:9411/api/v2/spans
+    tracing.sampling.probability: 1.0
+  outbox:
+    health.pending-age-threshold: 60s           # [S]
+  reconciliation:
+    cron: "0 30 0 * * *"                        # [S]
+    day-offset: 1                               # [S]
+    auto-adjustment-limit: 1000                 # [S]
