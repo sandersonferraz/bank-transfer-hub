@@ -21,8 +21,9 @@ class MoneyTests {
         return new Money(new BigDecimal(amount), BRL);
     }
 
+
     @Nested
-    @DisplayName("Construction")
+    @DisplayName("construction")
     class Construction {
 
         @ParameterizedTest(name = "accepts valid amount {0}")
@@ -32,7 +33,6 @@ class MoneyTests {
             Money money = brl(amount);
             assertThat(money.amount()).isEqualTo(amount);
             assertThat(money.currency()).isEqualTo(BRL);
-
         }
 
 
@@ -41,6 +41,7 @@ class MoneyTests {
         void shouldAcceptsZeroAmount() {
             assertThatCode(() -> new Money(BigDecimal.ZERO.negate(), BRL)).doesNotThrowAnyException();
         }
+
 
         @Test
         @DisplayName("Should accept negative zero (signum == 0)")
@@ -94,7 +95,16 @@ class MoneyTests {
                     .withMessage("Amount cannot be negative");
         }
 
+        @Test
+        @DisplayName("Should keep the same amount instance")
+        void shouldKeepTheSameAmountInstance() {
+            BigDecimal amount = new BigDecimal("10.00");
+            Money money = new Money(amount, BRL);
+            assertThat(money.amount()).isSameAs(amount);
+        }
+
     }
+
 
     @Nested
     @DisplayName("Sum")
@@ -186,17 +196,47 @@ class MoneyTests {
                     .withMessage("Amount cannot be null");
         }
 
+
     }
+
+
 
     @Nested
     @DisplayName("equality, hashCode and toString")
     class ValueObjectContract {
+
         @Test
         @DisplayName("Should be equal when amount (same scale) and currency match")
         void shouldBeEqualWhenSameValues() {
             Money a = brl("10.00");
             Money b = brl("10.00");
             assertThat(a).isEqualTo(b).hasSameHashCodeAs(b);
+        }
+
+        @Test
+        @DisplayName("Should be reflexive")
+        void shouldBeReflexive() {
+            Money a = brl("10.00");
+            assertThat(a).isEqualTo(a);
+        }
+
+        @Test
+        @DisplayName("Should be symmetric")
+        void shouldBeSymmetric() {
+            Money a = brl("10.00");
+            Money b = brl("10.00");
+            assertThat(a.equals(b)).isEqualTo(b.equals(a));
+        }
+
+        @Test
+        @DisplayName("Should be transitive")
+        void shouldBeTransitive() {
+            Money a = brl("10.00");
+            Money b = brl("10.00");
+            Money c = brl("10.00");
+            assertThat(a).isEqualTo(b);
+            assertThat(b).isEqualTo(c);
+            assertThat(a).isEqualTo(c);
         }
 
         @Test
@@ -212,6 +252,15 @@ class MoneyTests {
             Money b = brl("10.00");
             assertThat(a.amount()).isEqualByComparingTo(b.amount());
             assertThat(a).isNotEqualTo(b);
+        }
+
+        @Test
+        @DisplayName("Should have different hash codes for same numeric amount with different scales (known pitfall)")
+        void shouldHaveDifferentHashCodesForDifferentScales() {
+            Money a = brl("10.0");
+            Money b = brl("10.00");
+            assertThat(a.amount()).isEqualByComparingTo(b.amount());
+            assertThat(a.hashCode()).isNotEqualTo(b.hashCode());
         }
 
         @Test
@@ -235,6 +284,7 @@ class MoneyTests {
         void shouldContainAmountAndCurrencyAndBeReadable() {
             assertThat(brl("10.50").toString()).contains("10.50").contains("BRL");
         }
-
     }
+
+
 }
